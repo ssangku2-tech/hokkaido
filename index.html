@@ -299,13 +299,6 @@
   <!-- PANELS -->
   <div id="panels"></div>
 
-  <!-- OPTIONS -->
-  <div class="section">
-    <h2>📝 옵션 입력 <span style="font-size:11px;color:var(--mut);font-weight:600">(예약·메모·추가 후보지)</span></h2>
-    <div id="optList"></div>
-    <button class="add-opt" onclick="openOpt()">＋ 옵션 추가</button>
-  </div>
-
   <!-- FEEDBACK -->
   <div class="section">
     <h2>💬 의견 입력 <span style="font-size:11px;color:var(--mut);font-weight:600">(각자 자유롭게)</span></h2>
@@ -1013,7 +1006,17 @@ function buildPanels(){
       <button class="cost-btn" onclick="openCost()">💰 비용 입력</button>
       <div class="cost-mini-total">현재 총 비용 <b>${won(costTotalKRW())}원</b></div>
       ${i===0?tipsHtml():''}
+      ${i===0?optsSectionHtml():''}
     </div>`;}).join('');
+  renderOpts(); // optList는 1일차 패널에서만 새로 생성되므로 매번 다시 채워줌
+}
+
+function optsSectionHtml(){
+  return `<div class="section">
+    <h2>📝 옵션 입력 <span style="font-size:11px;color:var(--mut);font-weight:600">(예약·메모·추가 후보지)</span></h2>
+    <div id="optList"></div>
+    ${editMode?`<button class="add-opt" onclick="openOpt()">＋ 옵션 추가</button>`:''}
+  </div>`;
 }
 
 function tipsHtml(){
