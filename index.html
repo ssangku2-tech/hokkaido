@@ -167,12 +167,14 @@
     font-size:12.5px;font-weight:700;color:var(--mut);cursor:pointer;margin-top:6px}
   .add-item:active{background:var(--paper2)}
 
-  /* 비용 정산 버튼 */
+  /* 비용 입력 버튼 */
   .cost-btn{width:100%;margin-top:10px;padding:12px;border:none;border-radius:12px;
     background:linear-gradient(135deg,var(--moss),var(--moss-d));color:#fff;
     font-size:13.5px;font-weight:800;cursor:pointer;box-shadow:var(--shadow)}
   .cost-btn:active{opacity:.9}
-  /* 비용 정산 모달 */
+  .cost-mini-total{text-align:center;margin-top:8px;font-size:12.5px;color:var(--mut);font-weight:600}
+  .cost-mini-total b{color:var(--ink);font-weight:800}
+  /* 비용 입력 모달 */
   .cost-sheet{max-height:92vh;overflow:auto;display:flex;flex-direction:column}
   .cost-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px}
   .cost-head h3{margin:0;font-size:17px}
@@ -304,6 +306,13 @@
     <button class="add-opt" onclick="openOpt()">＋ 옵션 추가</button>
   </div>
 
+  <!-- FEEDBACK -->
+  <div class="section">
+    <h2>💬 의견 입력 <span style="font-size:11px;color:var(--mut);font-weight:600">(각자 자유롭게)</span></h2>
+    <button class="add-opt" onclick="openFeedback()">＋ 의견 입력</button>
+    <div id="fbList"></div>
+  </div>
+
   <div class="foot">🏔️ 홋카이도 트레킹 2026 · 곰 방울 필수 · 안전 산행</div>
 </div>
 
@@ -316,6 +325,19 @@
     <div class="sheet-actions">
       <button class="btn ghost" onclick="closeOpt()">취소</button>
       <button class="btn primary" onclick="saveOpt()">저장</button>
+    </div>
+  </div>
+</div>
+
+<!-- FEEDBACK (의견 입력) MODAL -->
+<div class="ov" id="fbOv">
+  <div class="sheet">
+    <h3 id="fbTitle">의견 입력</h3>
+    <input id="fbName" placeholder="이름">
+    <textarea id="fbText" placeholder="의견을 자유롭게 입력하세요"></textarea>
+    <div class="sheet-actions">
+      <button class="btn ghost" onclick="closeFeedback()">취소</button>
+      <button class="btn primary" onclick="saveFeedback()">저장</button>
     </div>
   </div>
 </div>
@@ -390,11 +412,11 @@
   </div>
 </div>
 
-<!-- COST (비용 정산) MODAL -->
+<!-- COST (비용 입력) MODAL -->
 <div class="ov" id="costOv">
   <div class="sheet cost-sheet">
     <div class="cost-head">
-      <h3>💰 비용 정산 <span class="cost-sub">전체 공통</span></h3>
+      <h3>💰 비용 입력 <span class="cost-sub">전체 공통</span></h3>
       <button class="cost-x" onclick="closeCost()">✕</button>
     </div>
 
@@ -754,7 +776,7 @@ const firebaseConfig = {
 };
 /* ▲▲▲ 여기까지 교체 ▲▲▲ */
 
-let db = null, optsRef = null, daysRef = null, personalRef = null, costRef = null, fbReady = false;
+let db = null, optsRef = null, daysRef = null, personalRef = null, costRef = null, feedbackRef = null, fbReady = false;
 let BASE_DAYS = null; // 코드 원본 백업(초기 시드용)
 function initFirebase(){
   try{
@@ -768,6 +790,7 @@ function initFirebase(){
     daysRef = db.ref("hokkaido2026/days");        // 일정 저장 경로
     personalRef = db.ref("hokkaido2026/personal"); // 개인별 준비물 경로
     costRef = db.ref("hokkaido2026/cost");         // 비용 정산 경로
+    feedbackRef = db.ref("hokkaido2026/feedback");  // 의견 입력 경로
     fbReady = true;
     // 옵션 실시간 구독
     optsRef.on("value", snap=>{
@@ -778,7 +801,14 @@ function initFirebase(){
     costRef.on("value", snap=>{
       const val = snap.val();
       if(val){ costs = Array.isArray(val)? val : Object.values(val); lsSave('cost',costs);
-        if(document.getElementById('costOv').classList.contains('show')) renderCost(); }
+        if(document.getElementById('costOv').classList.contains('show')) renderCost();
+        renderCostMini(); }
+    });
+    // 의견 입력 실시간 구독
+    feedbackRef.on("value", snap=>{
+      const val = snap.val();
+      feedbacks = val ? (Array.isArray(val)? val : Object.values(val)) : [];
+      lsSave('feedback', feedbacks); renderFeedback();
     });
     // 개인별 준비물 실시간 구독
     personalRef.on("value", snap=>{
@@ -837,6 +867,7 @@ let editMode = false;
 let opts = [];
 let personal = []; // 개인별 추가 준비물 (3인)
 let costs = [];    // 비용 정산 (전체 공통)
+let feedbacks = []; // 의견 입력 (전체 공통)
 let costFilter = '전체'; // 이름 필터
 const JPY_TO_KRW = 9.5;  // 100엔 = 950원
 let editIdx = -1;
@@ -979,7 +1010,8 @@ function buildPanels(){
       </div>
       <div class="tl">${d.items.map((it,ii)=>itemHtml(it,i,ii)).join('')}</div>
       ${editMode?`<button class="add-item" onclick="openItem(${i},-1)">＋ 일정 추가</button>`:''}
-      <button class="cost-btn" onclick="openCost()">💰 비용 정산</button>
+      <button class="cost-btn" onclick="openCost()">💰 비용 입력</button>
+      <div class="cost-mini-total">현재 총 비용 <b>${won(costTotalKRW())}원</b></div>
       ${i===0?tipsHtml():''}
     </div>`;}).join('');
 }
@@ -1210,6 +1242,12 @@ function krwOf(c){ // 한 항목의 원화 환산액
   return c.cur==='JPY' ? Math.round(amt*JPY_TO_KRW) : Math.round(amt);
 }
 function won(n){ return n.toLocaleString('ko-KR'); }
+function costTotalKRW(){ return costs.reduce((s,c)=>s+krwOf(c),0); }
+function renderCostMini(){
+  document.querySelectorAll('.cost-mini-total').forEach(el=>{
+    el.innerHTML = `현재 총 비용 <b>${won(costTotalKRW())}원</b>`;
+  });
+}
 function openCost(){
   document.getElementById('costOv').classList.add('show');
   // 입력창 초기화
@@ -1242,6 +1280,7 @@ function saveCost(){
   document.getElementById('costMemo').value='';
   document.getElementById('costConv').textContent='';
   renderCost();
+  renderCostMini();
   toast('추가되었습니다');
   lsSave('cost', costs); // 로컬 백업
   if(fbReady && costRef){ costRef.set(cleanForFirebase(costs)).catch(e=>{console.error(e);toast('저장 실패 — Firebase 규칙/인터넷 확인');}); }
@@ -1250,7 +1289,7 @@ function delCost(idx){
   const c = costs[idx];
   if(!confirm(`이 내역을 삭제할까요?\n\n${c.name} · ${c.cur==='JPY'?c.amt+'엔':won(+c.amt)+'원'}`)) return;
   costs.splice(idx,1);
-  renderCost(); toast('삭제되었습니다');
+  renderCost(); renderCostMini(); toast('삭제되었습니다');
   lsSave('cost', costs); // 로컬 백업
   if(fbReady && costRef){ costRef.set(cleanForFirebase(costs)).catch(e=>{console.error(e);toast('저장 실패');}); }
 }
@@ -1295,6 +1334,54 @@ function renderCost(){
   } else {
     tEl.innerHTML = `<div class="ct-sum"><span class="l">${esc(costFilter)} 합계</span><span class="v">${won(totalFiltered)}원</span></div>`;
   }
+}
+/* ---- 의견 입력 (전체 공통) ---- */
+let fbIdx = -1;
+function openFeedback(i){
+  fbIdx = (typeof i==='number')? i : -1;
+  document.getElementById('fbTitle').textContent = fbIdx>=0? '의견 수정':'의견 입력';
+  document.getElementById('fbName').value = fbIdx>=0? feedbacks[fbIdx].name : '';
+  document.getElementById('fbText').value = fbIdx>=0? feedbacks[fbIdx].text : '';
+  document.getElementById('fbOv').classList.add('show');
+}
+function closeFeedback(){ document.getElementById('fbOv').classList.remove('show'); }
+function saveFeedback(){
+  const name = document.getElementById('fbName').value.trim();
+  const text = document.getElementById('fbText').value.trim();
+  if(!name){ toast('이름을 입력하세요'); return; }
+  if(!text){ toast('의견을 입력하세요'); return; }
+  if(fbIdx>=0){ feedbacks[fbIdx] = {name, text, ts: feedbacks[fbIdx].ts||Date.now()}; }
+  else { feedbacks.push({name, text, ts:Date.now()}); }
+  renderFeedback(); closeFeedback(); toast('저장되었습니다');
+  lsSave('feedback', feedbacks);
+  if(fbReady && feedbackRef){ feedbackRef.set(cleanForFirebase(feedbacks)).catch(e=>{console.error(e);toast('저장 실패 — Firebase 규칙/인터넷 확인');}); }
+}
+function delFeedback(i){
+  const f = feedbacks[i];
+  if(!confirm(`이 의견을 삭제할까요?\n\n${f&&f.name||''}`)) return;
+  feedbacks.splice(i,1);
+  renderFeedback(); toast('삭제되었습니다');
+  lsSave('feedback', feedbacks);
+  if(fbReady && feedbackRef){ feedbackRef.set(cleanForFirebase(feedbacks)).catch(e=>{console.error(e);toast('저장 실패');}); }
+}
+function renderFeedback(){
+  const el = document.getElementById('fbList');
+  if(!el) return;
+  if(!feedbacks.length){
+    el.innerHTML = `<div class="opt-card"><div class="od" style="color:var(--stone);font-style:italic">아직 입력된 의견이 없어요. 자유롭게 한마디 남겨보세요.</div></div>`;
+    return;
+  }
+  el.innerHTML = feedbacks.slice().reverse().map(f=>{
+    const i = feedbacks.indexOf(f);
+    return `<div class="opt-card">
+      <div class="ot">${esc(f.name)}</div>
+      <div class="od">${esc(f.text)}</div>
+      <div class="opt-actions">
+        <button class="mini" onclick="openFeedback(${i})">수정</button>
+        <button class="mini del" onclick="delFeedback(${i})">삭제</button>
+      </div>
+    </div>`;
+  }).join('');
 }
 // Firebase는 undefined 값을 거부 → 모든 undefined를 제거하고 깨끗한 사본 생성
 function cleanForFirebase(obj){
@@ -1375,8 +1462,8 @@ function toast(msg){
 
 function applyMode(){
   if(!editMode){
-    // 보기 전용: 옵션 추가 버튼 숨김, 편집 버튼 클릭 차단
-    const ao = document.querySelector('.add-opt'); if(ao) ao.style.display='none';
+    // 보기 전용: 옵션/의견 추가 버튼 숨김, 편집 버튼 클릭 차단
+    document.querySelectorAll('.add-opt').forEach(ao=> ao.style.display='none');
     document.addEventListener('click',e=>{
       if(e.target.classList && e.target.classList.contains('mini')){
         e.stopPropagation();e.preventDefault();toast('보기 전용 링크입니다');
@@ -1403,12 +1490,14 @@ BASE_DAYS = JSON.parse(JSON.stringify(DAYS)); // 코드 원본 보관(최초 시
   const lsPersonal = lsLoad('personal'); if(lsPersonal) personal = lsPersonal;
   const lsCost = lsLoad('cost');     if(lsCost) costs = lsCost;
   const lsOpts = lsLoad('opts');     if(lsOpts && (!opts || !opts.length)) opts = lsOpts;
+  const lsFb = lsLoad('feedback');   if(lsFb) feedbacks = lsFb;
 })();
 initFirebase();                              // Firebase 연동(연결되면 최신값으로 갱신)
 buildTabs();
 buildPanels();
 renderTripProgress();
 renderOpts();
+renderFeedback();
 applyMode();
 // jump to today's tab if within trip
 const ti = todayDayIndex();
