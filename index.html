@@ -726,10 +726,10 @@ let DAYS = [
     sub:"새벽 이동 · 주유 · 공항 반납 · 귀국",
     route:"https://www.google.com/maps/dir/釧路市街/新千歳空港",
     items:[
-      {t:"06:00",sub:"새벽 출발",k:"move",kind:"🚗 장거리 이동",ttl:"구시로 → 신치토세공항 (약 3시간 30분~4시간)",pin:"新千歳空港",
-        desc:"체크아웃 후 이른 새벽 출발. 오후 항공편에 맞춰 넉넉한 여유를 두고 도토자동차도로 곧장 이동. 대중교통(구시로역 특급열차)으로도 약 4시간 소요되는 구간이라 렌터카 반납 시간을 고려해 일찍 출발.",chips:["🚗 약 3h30m~4h","🌅 새벽 출발"]},
-      {t:"11:00",sub:"이동",k:"move",kind:"⛽ 주유",ttl:"공항行 전 주유 만탱크",pin:"新千歳空港",
-        desc:"렌터카 반납 규정상 만탱크 반납. 공항 인근 주유소에서 급유 후 영업소로.",chips:["⛽ 만탱크"]},
+      {t:"08:00",sub:"아침 출발",k:"move",kind:"🚗 장거리 이동",ttl:"구시로 → 신치토세공항 (약 3시간 30분~4시간)",pin:"新千歳空港",
+        desc:"체크아웃 후 아침 출발. 오후 항공편에 맞춰 넉넉한 여유를 두고 도토자동차도로 곧장 이동. 대중교통(구시로역 특급열차)으로도 약 4시간 소요되는 구간이라 렌터카 반납 시간을 고려해 일찍 출발.",chips:["🚗 약 3h30m~4h","🌅 아침 출발"]},
+      {t:"12:00",sub:"이동",k:"move",kind:"⛽ 주유",ttl:"코스모석유 치토세공항SS에서 만탱크",pin:"コスモ石油 千歳空港SS 千歳市朝日町",
+        desc:"공항 영업소 주변엔 주유소가 거의 없으니 <b>千歳IC(치토세IC)</b>에서 내려 급유. <b>코스모석유 치토세공항SS</b>(千歳市朝日町, 공항 약 4.5km·24시간 셀프)가 IC 바로 옆이라 편리. 만탱크 후 받은 영수증이 만탱크 증명서가 되므로 꼭 보관.",chips:["⛽ 만탱크","🧾 영수증 보관","🛣️ 千歳IC 하차"]},
       {t:"12:30",sub:"반납",k:"move",kind:"🚗 렌터카 반납",ttl:"신치토세 공항 인근 영업소 반납",pin:"42.7752,141.6923",
         desc:"렌터카 반납 후 셔틀/도보로 공항 이동. 출국 수속·면세 쇼핑. 비행 2~3시간 전 도착 권장.",
         box:{h:"🚗 렌터카 반납",kv:[["예약번호","미입력",true],["반납","8/29 오전 · 공항 영업소"]]},
@@ -823,6 +823,7 @@ function initFirebase(){
         DAYS = normalizeDays(val);
         // ── 일회성 복구: 1일차 12:30 '치토세/마트 물품 구매'가 삭제됐으면 되살림 ──
         restoreLostItem();
+        fixLastDaySchedule();   // 마지막 날 출발 08:00 · 주유 12:00 반영
         lsSave('days', DAYS);
         buildTabs(); buildPanels(); renderTripProgress();
         const ti=todayDayIndex(); if(ti>=0) showDay(ti); else keepActiveDay();
@@ -851,6 +852,36 @@ function restoreLostItem(){
     _restoredOnce = true;
     persistDays(); // 복구 결과를 DB에 저장
   }catch(e){ console.error('복구 실패:', e); }
+}
+// ── 일회성 마이그레이션: 마지막 날 출발 08:00 · 주유 12:00(코스모석유 치토세공항SS) ──
+// 저장본(Firebase/localStorage)이 옛 값(06:00/11:00)이면 새 값으로 덮어쓴다. 내용 검사로 멱등.
+function fixLastDaySchedule(){
+  try{
+    if(!Array.isArray(DAYS)) return;
+    const day = DAYS.find(d => Array.isArray(d.items) && d.items.some(it => it && it.kind === "🚗 렌터카 반납"));
+    if(!day) return;
+    const items = day.items;
+    let changed = false;
+    // 출발: 신치토세공항行 장거리 이동 → 08:00 아침 출발
+    const dep = items.find(it => it && it.kind === "🚗 장거리 이동" && (it.ttl||"").indexOf("신치토세공항") >= 0);
+    if(dep && dep.t !== "08:00"){
+      dep.t = "08:00"; dep.sub = "아침 출발";
+      dep.desc = "체크아웃 후 아침 출발. 오후 항공편에 맞춰 넉넉한 여유를 두고 도토자동차도로 곧장 이동. 대중교통(구시로역 특급열차)으로도 약 4시간 소요되는 구간이라 렌터카 반납 시간을 고려해 일찍 출발.";
+      dep.chips = ["🚗 약 3h30m~4h","🌅 아침 출발"];
+      changed = true;
+    }
+    // 주유: 12:00 · 코스모석유 치토세공항SS
+    const fuel = items.find(it => it && it.kind === "⛽ 주유");
+    if(fuel && fuel.pin !== "コスモ石油 千歳空港SS 千歳市朝日町"){
+      fuel.t = "12:00";
+      fuel.ttl = "코스모석유 치토세공항SS에서 만탱크";
+      fuel.pin = "コスモ石油 千歳空港SS 千歳市朝日町";
+      fuel.desc = "공항 영업소 주변엔 주유소가 거의 없으니 <b>千歳IC(치토세IC)</b>에서 내려 급유. <b>코스모석유 치토세공항SS</b>(千歳市朝日町, 공항 약 4.5km·24시간 셀프)가 IC 바로 옆이라 편리. 만탱크 후 받은 영수증이 만탱크 증명서가 되므로 꼭 보관.";
+      fuel.chips = ["⛽ 만탱크","🧾 영수증 보관","🛣️ 千歳IC 하차"];
+      changed = true;
+    }
+    if(changed) persistDays();
+  }catch(e){ console.error('마지막 날 일정 수정 실패:', e); }
 }
 // Firebase가 객체로 돌려줄 수 있어 배열로 정규화
 function normalizeDays(val){
@@ -1500,6 +1531,7 @@ BASE_DAYS = JSON.parse(JSON.stringify(DAYS)); // 코드 원본 보관(최초 시
   const lsOpts = lsLoad('opts');     if(lsOpts && (!opts || !opts.length)) opts = lsOpts;
   const lsFb = lsLoad('feedback');   if(lsFb) feedbacks = lsFb;
 })();
+fixLastDaySchedule();                        // 저장본이 옛 값이면 마지막 날 일정 갱신(Firebase 연결 전 표시용)
 initFirebase();                              // Firebase 연동(연결되면 최신값으로 갱신)
 buildTabs();
 buildPanels();
