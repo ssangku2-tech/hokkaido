@@ -10,6 +10,7 @@
 <link rel="manifest" href="manifest.json">
 <!-- Firebase Realtime Database (compat) -->
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"></script>
 <style>
   :root{
@@ -778,51 +779,55 @@ function initFirebase(){
       return;
     }
     firebase.initializeApp(firebaseConfig);
-    db = firebase.database();
-    optsRef = db.ref("hokkaido2026/opts");        // 옵션 저장 경로
-    daysRef = db.ref("hokkaido2026/days");        // 일정 저장 경로
-    personalRef = db.ref("hokkaido2026/personal"); // 개인별 준비물 경로
-    costRef = db.ref("hokkaido2026/cost");         // 비용 정산 경로
-    feedbackRef = db.ref("hokkaido2026/feedback");  // 의견 입력 경로
-    fbReady = true;
-    // 옵션 실시간 구독
-    optsRef.on("value", snap=>{
-      const val = snap.val();
-      if(val){ opts = Array.isArray(val)? val : Object.values(val); lsSave('opts',opts); renderOpts(); }
-    });
-    // 비용 정산 실시간 구독
-    costRef.on("value", snap=>{
-      const val = snap.val();
-      if(val){ costs = Array.isArray(val)? val : Object.values(val); lsSave('cost',costs);
-        if(document.getElementById('costOv').classList.contains('show')) renderCost();
-        renderCostMini(); }
-    });
-    // 의견 입력 실시간 구독
-    feedbackRef.on("value", snap=>{
-      const val = snap.val();
-      feedbacks = val ? (Array.isArray(val)? val : Object.values(val)) : [];
-      lsSave('feedback', feedbacks); renderFeedback();
-    });
-    // 개인별 준비물 실시간 구독
-    personalRef.on("value", snap=>{
-      const val = snap.val();
-      if(val){ personal = Array.isArray(val)? val : Object.values(val); lsSave('personal',personal); buildPanels(); keepActiveDay(); }
-    });
-    // 일정 실시간 구독 (없으면 코드 원본으로 1회 시드)
-    daysRef.on("value", snap=>{
-      const val = snap.val();
-      if(!val){
-        // 최초 1회: 코드의 기본 일정을 DB에 심음
-        daysRef.set(BASE_DAYS).catch(e=>console.error("seed 실패",e));
-        return;
-      }
-      DAYS = normalizeDays(val);
-      // ── 일회성 복구: 1일차 12:30 '치토세/마트 물품 구매'가 삭제됐으면 되살림 ──
-      restoreLostItem();
-      lsSave('days', DAYS);
-      buildTabs(); buildPanels(); renderTripProgress();
-      const ti=todayDayIndex(); if(ti>=0) showDay(ti); else keepActiveDay();
-    });
+    // 익명 인증 — DB 보안 규칙을 "auth != null"로 잠그기 위한 전제조건.
+    // 로그인 전에는 db 참조를 만들지 않는다 (미인증 상태로 규칙 통과 시도 자체를 방지).
+    firebase.auth().signInAnonymously().then(()=>{
+      db = firebase.database();
+      optsRef = db.ref("hokkaido2026/opts");        // 옵션 저장 경로
+      daysRef = db.ref("hokkaido2026/days");        // 일정 저장 경로
+      personalRef = db.ref("hokkaido2026/personal"); // 개인별 준비물 경로
+      costRef = db.ref("hokkaido2026/cost");         // 비용 정산 경로
+      feedbackRef = db.ref("hokkaido2026/feedback");  // 의견 입력 경로
+      fbReady = true;
+      // 옵션 실시간 구독
+      optsRef.on("value", snap=>{
+        const val = snap.val();
+        if(val){ opts = Array.isArray(val)? val : Object.values(val); lsSave('opts',opts); renderOpts(); }
+      });
+      // 비용 정산 실시간 구독
+      costRef.on("value", snap=>{
+        const val = snap.val();
+        if(val){ costs = Array.isArray(val)? val : Object.values(val); lsSave('cost',costs);
+          if(document.getElementById('costOv').classList.contains('show')) renderCost();
+          renderCostMini(); }
+      });
+      // 의견 입력 실시간 구독
+      feedbackRef.on("value", snap=>{
+        const val = snap.val();
+        feedbacks = val ? (Array.isArray(val)? val : Object.values(val)) : [];
+        lsSave('feedback', feedbacks); renderFeedback();
+      });
+      // 개인별 준비물 실시간 구독
+      personalRef.on("value", snap=>{
+        const val = snap.val();
+        if(val){ personal = Array.isArray(val)? val : Object.values(val); lsSave('personal',personal); buildPanels(); keepActiveDay(); }
+      });
+      // 일정 실시간 구독 (없으면 코드 원본으로 1회 시드)
+      daysRef.on("value", snap=>{
+        const val = snap.val();
+        if(!val){
+          // 최초 1회: 코드의 기본 일정을 DB에 심음
+          daysRef.set(BASE_DAYS).catch(e=>console.error("seed 실패",e));
+          return;
+        }
+        DAYS = normalizeDays(val);
+        // ── 일회성 복구: 1일차 12:30 '치토세/마트 물품 구매'가 삭제됐으면 되살림 ──
+        restoreLostItem();
+        lsSave('days', DAYS);
+        buildTabs(); buildPanels(); renderTripProgress();
+        const ti=todayDayIndex(); if(ti>=0) showDay(ti); else keepActiveDay();
+      });
+    }).catch(e=>{ console.warn("Firebase 인증 실패 — 로컬(URL 해시) 모드로 동작", e); });
   }catch(e){ console.error("Firebase init 실패:", e); }
 }
 // 삭제된 1일차 12:30 물품 구매 항목 복구 (한 번만 실행)
@@ -1070,7 +1075,7 @@ function renderOpts(){
       </div>
     </div>`).join('');
 }
-function esc(s){return (s||'').replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));}
+function esc(s){return (s||'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));}
 
 function openOpt(i){
   editIdx = (typeof i==='number')? i : -1;
@@ -1306,7 +1311,7 @@ function renderCost(){
   // 필터 칩
   const fEl=document.getElementById('costFilter');
   fEl.innerHTML = [`<span class="cost-chip ${costFilter==='전체'?'on':''}" onclick="setCostFilter('전체')">전체</span>`]
-    .concat(names.map(n=>`<span class="cost-chip ${costFilter===n?'on':''}" onclick="setCostFilter('${n.replace(/'/g,"\\'")}')">${esc(n)}</span>`)).join('');
+    .concat(names.map(n=>`<span class="cost-chip ${costFilter===n?'on':''}" onclick="setCostFilter('${esc(n).replace(/'/g,"\\'")}')">${esc(n)}</span>`)).join('');
 
   // 리스트(필터 적용, 최신순)
   const rows = costs.map((c,i)=>({c,i})).filter(o=> costFilter==='전체' || o.c.name===costFilter);
