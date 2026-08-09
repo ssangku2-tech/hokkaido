@@ -1179,7 +1179,7 @@ function itemHtml(it, di, ii){
         <button class="mini" onclick="openItem(${di},${ii})">수정</button>
         <button class="mini del" onclick="delItem(${di},${ii})">삭제</button>
       </div>
-      <button class="mini memo-btn" onclick="openMemo(${di},${ii})">📝 메모</button>
+      <button class="mini memo-btn" onclick="openMemo(${di},${ii})">📝 ${it.memo?'메모 수정':'메모'}</button>
     </div>`;
   }
   return `<div class="item ${it.k}">
