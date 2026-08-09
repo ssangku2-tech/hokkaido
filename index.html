@@ -1372,7 +1372,9 @@ let memoDay=-1, memoIdx=-1;
 function openMemo(di,ii){
   if(!editMode){toast('보기 전용입니다');return;}
   memoDay=di; memoIdx=ii;
-  document.getElementById('memoText').value = DAYS[di].items[ii].memo || '';
+  const cur = DAYS[di].items[ii].memo || '';
+  document.getElementById('memoTitle').textContent = cur? '메모 수정' : '메모';
+  document.getElementById('memoText').value = cur;
   document.getElementById('memoOv').classList.add('show');
 }
 function closeMemo(){document.getElementById('memoOv').classList.remove('show');}
