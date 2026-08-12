@@ -169,6 +169,7 @@
   .trek-legend .lg{display:inline-flex;align-items:center;gap:4px;white-space:nowrap}
   .trek-legend .num{display:inline-flex;align-items:center;justify-content:center;width:14px;height:14px;
     border-radius:50%;background:var(--ink);color:#fff;font-size:9.5px;font-weight:800;flex:none}
+  .trek-legend .dia{color:var(--moss);font-size:10.5px;flex:none}
   .trek-legend .len{color:var(--ink);font-weight:800}
   .trek-legend .src{color:var(--stone);font-size:10.5px}
   .item-actions{display:flex;gap:7px;margin-top:10px;justify-content:space-between;align-items:center}
@@ -1150,8 +1151,38 @@ const TREK_PATHS = {
    구글 지도 보행경로망에 없는 목도라 앱에서 직접 그린다. deck: 이 인덱스부터 목도(데크) 구간,
    marks: [경로 인덱스, 표시할 이름], road/coast: 방향 감각을 주는 배경 선. */
 const TREK_SHAPES = {
+  "オンネトー":{
+    len:"편도 1.50km", note:"호수 동안 산책로",
+    marks:[[0,"국설 야영장(기점)"],[15,"메아칸다케 등산로 분기"],[32,"호반 트레일 북단"]],
+    pois:[[43.3856981,143.9672017,"온네토 전망 데크"]],
+    pts:[
+      [43.38103,143.97317],[43.38156,143.97431],[43.38203,143.97459],[43.38219,143.97458],
+      [43.38234,143.97436],[43.38235,143.97367],[43.38252,143.97309],[43.38284,143.9732],
+      [43.38315,143.97366],[43.3832,143.97347],[43.38312,143.97252],[43.38349,143.97152],
+      [43.38376,143.97113],[43.38396,143.97111],[43.38412,143.97133],[43.3841,143.97159],
+      [43.38396,143.97111],[43.38409,143.97098],[43.38412,143.97071],[43.38444,143.97067],
+      [43.38499,143.97106],[43.3851,143.97107],[43.38518,143.97084],[43.38536,143.97084],
+      [43.38575,143.9711],[43.38615,143.97076],[43.38651,143.97095],[43.38726,143.97092],
+      [43.38816,143.9712],[43.38835,143.971],[43.38884,143.96996],[43.38883,143.96944],
+      [43.38859,143.96899]],
+    lake:[
+      [43.38168,143.97308],[43.38147,143.97153],[43.3805,143.97023],[43.38074,143.96998],
+      [43.38163,143.96975],[43.38181,143.96923],[43.38153,143.96781],[43.38161,143.96742],
+      [43.3821,143.96667],[43.38235,143.96557],[43.3827,143.9653],[43.38284,143.96572],
+      [43.38326,143.96596],[43.38409,143.966],[43.3845,143.96571],[43.38496,143.96593],
+      [43.38537,143.96647],[43.3854,143.96675],[43.3858,143.96745],[43.38573,143.96781],
+      [43.38582,143.96845],[43.38653,143.96882],[43.38701,143.96879],[43.38794,143.96921],
+      [43.38847,143.96928],[43.38874,143.96967],[43.38855,143.97034],[43.38798,143.97108],
+      [43.38725,143.97076],[43.38646,143.9708],[43.38627,143.97064],[43.38595,143.97077],
+      [43.38591,143.97092],[43.38516,143.97065],[43.3848,143.9708],[43.38401,143.96992],
+      [43.38387,143.97022],[43.38406,143.97063],[43.38388,143.97095],[43.38366,143.97088],
+      [43.38344,143.97125],[43.38307,143.97217],[43.38297,143.97292],[43.38249,143.97291],
+      [43.38223,143.97325],[43.38224,143.97428],[43.38209,143.97431],[43.38191,143.97404],
+      [43.38187,143.97356],[43.38168,143.97308]],
+    road:[[[43.3852,143.96597],[43.38551,143.96636],[43.38627,143.96841],[43.38798,143.96903],[43.38917,143.96875],[43.38987,143.96879]],[[43.3897,143.97058],[43.38973,143.97111]],[[43.37974,143.97052],[43.38059,143.9698],[43.38159,143.96933],[43.38135,143.96758],[43.38238,143.96519],[43.38277,143.96518],[43.38344,143.96581],[43.38401,143.9658],[43.38457,143.96551],[43.3852,143.96597]],[[43.37932,143.97055],[43.37974,143.97052]]]
+  },
   "野付半島 トドワラ":{
-    len:"편도 1.57km", deck:12,
+    len:"편도 1.57km", deck:12, note:"실선 사구길 · 점선 목도",
     marks:[[0,"네이처센터"],[3,"목도 입구"],[12,"토도와라 광장"],[19,"고사목 지대 끝"]],
     pts:[
       [43.59003,145.3353],[43.58997,145.33537],[43.5892,145.33579],[43.58858,145.3362],
@@ -1176,7 +1207,9 @@ const TREK_SHAPES = {
 let trekMapSeq = 0;
 function trekMapSvg(sh){
   const W=320, H=250, PAD=22;
-  const la=sh.pts.map(p=>p[0]), lo=sh.pts.map(p=>p[1]);
+  // 프레임은 경로·주요 지점·호수까지 담기게 맞춘다(도로·해안선은 배경이라 제외)
+  const fit=sh.pts.concat(sh.lake||[], (sh.pois||[]).map(p=>[p[0],p[1]]));
+  const la=fit.map(p=>p[0]), lo=fit.map(p=>p[1]);
   const k=Math.cos((la.reduce((a,b)=>a+b,0)/la.length)*Math.PI/180);
   const n0=Math.max(...la), s0=Math.min(...la), e0=Math.max(...lo), w0=Math.min(...lo);
   // 경로가 프레임에 여유 있게 들어가는 축척을 고른 뒤, 남는 방향은 창을 넓혀 배경을 더 보여준다
@@ -1191,19 +1224,27 @@ function trekMapSvg(sh){
   const cid='trekClip'+(++trekMapSeq);
 
   const coast=(sh.coast||[]).map(sg=>`<path d="${path(sg)}" fill="none" stroke="var(--sky)" stroke-width="1" opacity=".5"/>`).join('');
+  const lake=sh.lake? `<path d="${path(sh.lake)}Z" fill="var(--sky)" fill-opacity=".3" stroke="var(--sky)" stroke-width="1.2" stroke-opacity=".7"/>` : '';
   const road=(sh.road||[]).map(sg=>`<path d="${path(sg)}" fill="none" stroke="var(--stone)" stroke-width="2.6" opacity=".45" stroke-linecap="round"/>`).join('');
-  const trail=`<path d="${path(sh.pts.slice(0,sh.deck+1))}" fill="none" stroke="var(--ember)" stroke-width="2.8" stroke-linejoin="round" stroke-linecap="round"/>`
-    +`<path d="${path(sh.pts.slice(sh.deck))}" fill="none" stroke="var(--ember)" stroke-width="2.8" stroke-dasharray="5 3.5" stroke-linejoin="round" stroke-linecap="round"/>`;
+  // deck이 없으면 전 구간을 실선으로 그린다
+  const dk=(sh.deck==null? sh.pts.length-1 : sh.deck);
+  const trail=`<path d="${path(sh.pts.slice(0,dk+1))}" fill="none" stroke="var(--ember)" stroke-width="2.8" stroke-linejoin="round" stroke-linecap="round"/>`
+    +(dk<sh.pts.length-1? `<path d="${path(sh.pts.slice(dk))}" fill="none" stroke="var(--ember)" stroke-width="2.8" stroke-dasharray="5 3.5" stroke-linejoin="round" stroke-linecap="round"/>`:'');
   const marks=sh.marks.map((m,j)=>{
     const [x,y]=P(sh.pts[m[0]]);
     return `<circle cx="${x}" cy="${y}" r="7.5" fill="var(--ink)" stroke="#fff" stroke-width="1.6"/>`
       +`<text x="${x}" y="${y+3.3}" text-anchor="middle" font-size="9.5" font-weight="800" fill="#fff">${j+1}</text>`;
   }).join('');
+  // 경로 밖 참고 지점(주차장·전망대 등)은 마름모로 구분
+  const pois=(sh.pois||[]).map(p=>{
+    const [x,y]=P(p);
+    return `<path d="M${x} ${y-6}l6 6-6 6-6-6z" fill="var(--moss)" stroke="#fff" stroke-width="1.5"/>`;
+  }).join('');
 
   return `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="트레킹 실측 경로 지도">
     <defs><clipPath id="${cid}"><rect width="${W}" height="${H}"/></clipPath></defs>
     <rect width="${W}" height="${H}" fill="var(--snow)"/>
-    <g clip-path="url(#${cid})">${coast}${road}${trail}${marks}</g>
+    <g clip-path="url(#${cid})">${coast}${lake}${road}${trail}${marks}${pois}</g>
     <rect x="6" y="${H-26}" width="${barPx+38}" height="20" rx="6" fill="var(--snow)" opacity=".8"/>
     <g stroke="var(--ink)" stroke-width="1.3" opacity=".6">
       <path d="M12 ${H-13}h${barPx}"/><path d="M12 ${H-16.5}v7"/><path d="M${12+barPx} ${H-16.5}v7"/>
@@ -1218,8 +1259,9 @@ function trekMapSvg(sh){
 function trekMapHtml(sh){
   return `<div class="trek-map">${trekMapSvg(sh)}</div><div class="trek-legend">`
     + sh.marks.map((m,j)=>`<span class="lg"><span class="num">${j+1}</span>${m[1]}</span>`).join('')
+    + (sh.pois||[]).map(p=>`<span class="lg"><span class="dia">◆</span>${p[2]}</span>`).join('')
     + `<span class="lg len">${sh.len}</span>`
-    + `<span class="lg src">실선 사구길 · 점선 목도 · OSM 실측</span></div>`;
+    + `<span class="lg src">${sh.note? sh.note+' · ':''}OSM 실측</span></div>`;
 }
 
 function trekNode(v){ return (v && typeof v==='object') ? v : {ko:v, q:v}; }
