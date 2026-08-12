@@ -159,6 +159,9 @@
     background:var(--ember);color:#fff;border:none;border-radius:10px;
     padding:7px 13px;font-size:12.5px;font-weight:700;text-decoration:none;cursor:pointer}
   .trek-route:active{background:var(--ember-d)}
+  .trek-path{margin-top:6px;font-size:11.8px;color:#4a5a63;line-height:1.7}
+  .trek-path .tp-node{background:#F2F6F1;border:1px solid #DCE6DA;border-radius:7px;padding:2px 7px;white-space:nowrap}
+  .trek-path .tp-arw{margin:0 4px;color:var(--ember);font-weight:800}
   .item-actions{display:flex;gap:7px;margin-top:10px;justify-content:space-between;align-items:center}
   .item-actions .ia-left{display:flex;gap:7px}
   .item-actions .mini{font-size:11px;padding:4px 10px}
@@ -355,7 +358,8 @@
     <textarea id="itDesc" placeholder="설명"></textarea>
     <input id="itDur" placeholder="소요시간 (예: 4.5~5시간) — 비우면 표시 안 됨">
     <input id="itPin" placeholder="장소/지도 검색어 (예: 旭岳, 또는 위경도)">
-    <input id="itGmap" placeholder="트레킹 경로 목적지(선택) — 비우면 장소 사용">
+    <input id="itGmapFrom" placeholder="트레킹 출발지(선택) — 비우면 기본 코스 사용">
+    <input id="itGmap" placeholder="트레킹 도착지(선택) — 비우면 장소 사용">
     <div style="font-size:11.5px;font-weight:700;color:var(--mut);margin:2px 2px 6px">정보 박스 (예약·항공 등) — 한 줄에 "항목: 내용"</div>
     <input id="itBoxH" placeholder="박스 제목 (예: 🚗 렌터카 예약) — 비우면 박스 없음">
     <textarea id="itBox" placeholder="예약번호: ABC123&#10;픽업: 8/23 · 공항 영업소&#10;반납: 8/29 오전"></textarea>
@@ -1107,6 +1111,47 @@ function buildTabs(){
     </div>`).join('');
 }
 
+/* 트레킹 코스별 출발지 → (경유) → 도착지.
+   일정 데이터(Firebase)에 저장되는 값이 아니라 표시 전용이라 pin 값을 키로 조회한다.
+   각 지점은 {ko: 화면에 쓸 이름, q: 구글맵 검색어}. */
+const TREK_PATHS = {
+  "温根内ビジターセンター":{
+    from:{ko:"온네나이 비지터센터",q:"温根内ビジターセンター"},
+    via:[{ko:"온네나이 목도",q:"温根内木道"}],
+    to:{ko:"비지터센터 (원점 회귀)",q:"温根内ビジターセンター"}},
+  "オンネトー":{
+    from:{ko:"온네토 국설 야영장",q:"オンネトー国設野営場"},
+    via:[{ko:"온네토 호반",q:"オンネトー"}],
+    to:{ko:"야영장 (원점 회귀)",q:"オンネトー国設野営場"}},
+  "知床五湖":{
+    from:{ko:"고코 필드하우스",q:"知床五湖フィールドハウス"},
+    to:{ko:"코한 전망대 (고가 목도 끝)",q:"知床五湖 湖畔展望台"}},
+  "野付半島 トドワラ":{
+    from:{ko:"노츠케반도 네이처센터",q:"野付半島ネイチャーセンター"},
+    to:{ko:"토도와라",q:"野付半島 トドワラ"}},
+  "霧多布湿原 展望台":{
+    from:{ko:"기리타푸습원 센터",q:"霧多布湿原センター"},
+    to:{ko:"야치보우즈 목도",q:"ヤチボウズ木道"}}
+};
+function trekNode(v){ return (v && typeof v==='object') ? v : {ko:v, q:v}; }
+function buildTrekPath(from, via, to){
+  const f=trekNode(from), t=trekNode(to), v=(via||[]).map(trekNode);
+  const q=s=>encodeURIComponent(s);
+  // origin을 명시해야 현재 위치가 아닌 실제 출발지에서 시작하는 경로가 그려진다
+  let url='https://www.google.com/maps/dir/?api=1&origin='+q(f.q)+'&destination='+q(t.q)+'&travelmode=walking';
+  if(v.length) url+='&waypoints='+v.map(x=>q(x.q)).join('%7C');
+  return {from:f, via:v, to:t, url:url};
+}
+function trekPathOf(it){
+  const from=(it.gmapFrom||'').trim(), to=(it.gmap||'').trim();
+  if(to.indexOf('http')===0) return {url:to};              // 직접 지정한 지도 링크
+  if(from) return buildTrekPath(from, [], to||it.pin||from);
+  const preset = TREK_PATHS[it.pin];
+  if(preset) return buildTrekPath(preset.from, preset.via, preset.to);
+  if(to && it.pin) return buildTrekPath(it.pin, [], to);
+  return null;                                             // 출발지를 모르면 버튼을 숨김
+}
+
 function itemHtml(it, di, ii){
   let course = '';
   if(it.course){
@@ -1127,14 +1172,17 @@ function itemHtml(it, di, ii){
       let cl='chip'; if(/필수|주의|⚠️|성수기|강풍|추위|활화산/.test(c)) cl='chip warn';
       return `<span class="${cl}">${c}</span>`;}).join('')+`</div>`;
   }
-  // 트레킹이면 경로보기 버튼(구글맵 연동)
+  // 트레킹이면 경로보기 버튼 — 현재 위치가 아니라 출발지→도착지를 구글맵에 그린다
   let trekRoute='';
-  if(it.k==='trek' && (it.gmap||it.pin)){
-    const dest = it.gmap || it.pin;
-    const url = it.gmap && it.gmap.indexOf('http')===0
-      ? it.gmap
-      : 'https://www.google.com/maps/dir/?api=1&destination='+encodeURIComponent(dest)+'&travelmode=driving';
-    trekRoute = `<div><a class="trek-route" href="${url}" target="_blank">🥾 트레킹 경로 보기</a></div>`;
+  if(it.k==='trek'){
+    const p = trekPathOf(it);
+    if(p){
+      const chain = p.from
+        ? `<div class="trek-path">`+[p.from].concat(p.via||[],[p.to])
+            .map(n=>`<span class="tp-node">${n.ko}</span>`).join(`<span class="tp-arw">→</span>`)+`</div>`
+        : '';
+      trekRoute = `<div><a class="trek-route" href="${p.url}" target="_blank">🥾 트레킹 경로 보기</a>${chain}</div>`;
+    }
   }
   // 지도 버튼: 겹친 타원(동심 타원) 형태의 위치 마커 아이콘
   const mapIcon = `<svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -1308,6 +1356,7 @@ function openItem(di, ii){
   document.getElementById('itDesc').value = it.desc||'';
   document.getElementById('itDur').value = it.dur||'';
   document.getElementById('itPin').value = it.pin||'';
+  document.getElementById('itGmapFrom').value = it.gmapFrom||'';
   document.getElementById('itGmap').value = it.gmap||'';
   // 정보 박스: kv 배열 → "항목: 내용" 줄 텍스트
   document.getElementById('itBoxH').value = (it.box && it.box.h) ? it.box.h : '';
@@ -1328,6 +1377,7 @@ function saveItem(){
     desc: document.getElementById('itDesc').value.trim(),
     dur: document.getElementById('itDur').value.trim(),
     pin: document.getElementById('itPin').value.trim(),
+    gmapFrom: document.getElementById('itGmapFrom').value.trim(),
     gmap: document.getElementById('itGmap').value.trim()
   };
   // 정보 박스: "항목: 내용" 줄 텍스트 → kv 배열
