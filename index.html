@@ -420,6 +420,18 @@
   </div>
 </div>
 
+<!-- COMMON (공통 준비물) MODAL -->
+<div class="ov" id="commonOv">
+  <div class="sheet">
+    <h3>공통 준비물</h3>
+    <textarea id="commonItems" placeholder="함께 쓰는 준비물 (구급함, 곰 방울, 버너·코펠, 랜턴, 멀티탭 등)&#10;줄바꿈으로 여러 개 입력"></textarea>
+    <div class="sheet-actions">
+      <button class="btn ghost" onclick="closeCommon()">취소</button>
+      <button class="btn primary" onclick="saveCommon()">저장</button>
+    </div>
+  </div>
+</div>
+
 <!-- COST (비용 입력) MODAL -->
 <div class="ov" id="costOv">
   <div class="sheet cost-sheet">
@@ -787,12 +799,7 @@ let DAYS = [
 const TIPS = [
   ["🐻","<b>불곰(히구마) 안전수칙</b> — 시레토코·노츠케 등은 불곰 서식지. 트레킹 시 <b>곰 방울</b> 지참·소리내며 이동. 캠핑 옵션 선택 시 음식물은 텐트 밖 방치 금지, 지정 수거함에 즉시 폐기."],
   ["🧥","<b>동부 특유의 기후</b> — 구시로·네무로는 여름에도 해무(海霧)가 잦아 다른 지역보다 서늘함. 얇은 겉옷·바람막이 필수."],
-  ["🏠","<b>숙소 사전 예약</b> — 8월말은 성수기. 각 지역 게스트하우스/호텔 또는 캠핑장(옵션) 모두 사전 예약 권장 — 예약 방식은 공식 사이트로 확인."],
   ["🥾","<b>도보·트레킹 장비</b> — 걷기 편한 신발, 레인웨어, 장갑·모자, 행동식, 충분한 식수(1.5~2L), 모바일배터리."],
-  ["🚗","<b>장거리 렌터카 운전</b> — 동부는 이동 거리가 길어(1일 3~4시간 구간 다수) 주유는 미리미리, 휴게소에서 충분히 휴식."],
-  ["💴","<b>현금</b> — 시골 식당·주차장·소규모 마트는 현금 위주. 1인 ¥30,000 이상 준비. 동전 별도."],
-  ["🌋","<b>유황산·화산 지형 주의</b> — 아토사누프리(유황산) 등 활화산 지대는 가스 분출구에 너무 가까이 접근하지 않도록 통제선 준수."],
-  ["📵","<b>통신·내비</b> — 반도·산간 지역은 통신 약함. 오프라인 지도(Google 지도 다운로드) 준비."],
 ];
 
 /* ============ STATE / RENDER ============ */
@@ -811,7 +818,7 @@ const firebaseConfig = {
 };
 /* ▲▲▲ 여기까지 교체 ▲▲▲ */
 
-let db = null, optsRef = null, daysRef = null, personalRef = null, costRef = null, feedbackRef = null, fbReady = false;
+let db = null, optsRef = null, daysRef = null, personalRef = null, commonRef = null, costRef = null, feedbackRef = null, fbReady = false;
 let BASE_DAYS = null; // 코드 원본 백업(초기 시드용)
 function initFirebase(){
   try{
@@ -827,6 +834,7 @@ function initFirebase(){
       optsRef = db.ref("hokkaido2026/opts");        // 옵션 저장 경로
       daysRef = db.ref("hokkaido2026/days");        // 일정 저장 경로
       personalRef = db.ref("hokkaido2026/personal"); // 개인별 준비물 경로
+      commonRef = db.ref("hokkaido2026/common");     // 공통 준비물 경로
       costRef = db.ref("hokkaido2026/cost");         // 비용 정산 경로
       feedbackRef = db.ref("hokkaido2026/feedback");  // 의견 입력 경로
       fbReady = true;
@@ -852,6 +860,11 @@ function initFirebase(){
       personalRef.on("value", snap=>{
         const val = snap.val();
         if(val){ personal = Array.isArray(val)? val : Object.values(val); lsSave('personal',personal); buildPanels(); keepActiveDay(); }
+      });
+      // 공통 준비물 실시간 구독 (빈 문자열로 지운 것도 반영해야 하므로 null만 걸러낸다)
+      commonRef.on("value", snap=>{
+        const val = snap.val();
+        if(val!=null){ common = String(val); lsSave('common',common); buildPanels(); keepActiveDay(); }
       });
       // 일정 실시간 구독 (없으면 코드 원본으로 1회 시드)
       daysRef.on("value", snap=>{
@@ -1077,6 +1090,7 @@ const TRIP_START = new Date(2026,7,23); // Aug 23 2026
 let editMode = false;
 let opts = [];
 let personal = []; // 개인별 추가 준비물 (3인)
+let common = '';   // 공통 준비물 (자유 입력, 줄바꿈 구분)
 let costs = [];    // 비용 정산 (전체 공통)
 let feedbacks = []; // 의견 입력 (전체 공통)
 let costFilter = '전체'; // 이름 필터
@@ -1405,10 +1419,23 @@ function optsSectionHtml(){
 
 function tipsHtml(){
   return `<div class="section" style="padding:18px 0 0">
-    <h2 style="font-size:15px">🎒 준비물 & 유의사항</h2>
+    <h2 style="font-size:15px">⚠️ 유의사항</h2>
     ${TIPS.map(t=>`<div class="tip"><span class="ic">${t[0]}</span><span>${t[1]}</span></div>`).join('')}
+    ${commonHtml()}
     ${personalHtml()}
   </div>`;
+}
+
+// 공통 준비물 — 3인이 함께 쓰는 것. 자유 입력(줄바꿈으로 여러 개)
+function commonHtml(){
+  const btn = editMode ? `<button class="person-edit" onclick="openCommon()">${common?'편집':'입력'}</button>` : '';
+  const items = common
+    ? `<div class="person-items">${esc(common).replace(/\n/g,'<br>')}</div>`
+    : `<div class="person-items" style="color:var(--stone);font-style:italic">아직 입력된 공통 준비물이 없어요.${editMode?' 입력 버튼으로 추가해 보세요.':''}</div>`;
+  return `<h2 style="font-size:15px;margin-top:18px">🎒 공통 준비물 <span style="font-size:11px;color:var(--mut);font-weight:600">(함께 쓰는 것)</span></h2>
+    <div class="person-card">
+      <div class="person-top"><span class="person-name">공통</span>${btn}</div>${items}
+    </div>`;
 }
 
 // 개인별 추가 준비물 (3명) — 공통 준비물 외 각자 챙길 것
@@ -1624,6 +1651,22 @@ function savePerson(){
   lsSave('personal', personal); // 로컬 백업
   if(fbReady && personalRef){
     personalRef.set(cleanForFirebase(personal)).catch(e=>{console.error(e);toast('저장 실패 — Firebase 규칙/인터넷 확인');});
+  }
+}
+
+/* ---- 공통 준비물 ---- */
+function openCommon(){
+  if(!editMode){toast('보기 전용입니다');return;}
+  document.getElementById('commonItems').value = common||'';
+  document.getElementById('commonOv').classList.add('show');
+}
+function closeCommon(){document.getElementById('commonOv').classList.remove('show');}
+function saveCommon(){
+  common = document.getElementById('commonItems').value.trim();
+  buildPanels(); keepActiveDay(); closeCommon(); toast('저장되었습니다');
+  lsSave('common', common); // 로컬 백업
+  if(fbReady && commonRef){
+    commonRef.set(common).catch(e=>{console.error(e);toast('저장 실패 — Firebase 규칙/인터넷 확인');});
   }
 }
 
@@ -1879,6 +1922,7 @@ BASE_DAYS = JSON.parse(JSON.stringify(DAYS)); // 코드 원본 보관(최초 시
 (function restoreFromLS(){
   const lsDays = lsLoad('days');     if(lsDays && Array.isArray(lsDays) && lsDays.length) DAYS = normalizeDays(lsDays);
   const lsPersonal = lsLoad('personal'); if(lsPersonal) personal = lsPersonal;
+  const lsCommon = lsLoad('common'); if(typeof lsCommon === 'string') common = lsCommon;
   const lsCost = lsLoad('cost');     if(lsCost) costs = lsCost;
   const lsOpts = lsLoad('opts');     if(lsOpts && (!opts || !opts.length)) opts = lsOpts;
   const lsFb = lsLoad('feedback');   if(lsFb) feedbacks = lsFb;
