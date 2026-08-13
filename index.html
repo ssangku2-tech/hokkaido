@@ -144,8 +144,12 @@
   .alt-add:active{background:var(--paper2)}
 
   /* 개인별 준비물 카드 */
-  .person-card{background:#fff;border:1px solid var(--line);border-radius:13px;padding:10px 12px;margin-bottom:8px;box-shadow:var(--shadow)}
-  .person-top{display:flex;align-items:center;gap:9px;min-height:36px}
+  /* 내용과 편집 버튼을 같은 행에 둬서 카드 위쪽에 빈 줄이 생기지 않게 한다 */
+  .person-card{background:#fff;border:1px solid var(--line);border-radius:13px;padding:10px 12px;margin-bottom:8px;
+    box-shadow:var(--shadow);display:flex;align-items:flex-start;gap:10px}
+  .pc-main{flex:1;min-width:0}
+  .pc-main>.person-items:first-child{margin-top:0}
+  .person-top{display:flex;align-items:center;gap:9px}
   .person-av{flex:0 0 auto;width:30px;height:30px;border-radius:50%;
     background:linear-gradient(135deg,var(--moss),var(--sky));color:#fff;
     font-size:14px;font-weight:800;display:flex;align-items:center;justify-content:center}
@@ -1432,11 +1436,8 @@ function commonHtml(){
   const items = common
     ? `<div class="person-items">${esc(common).replace(/\n/g,'<br>')}</div>`
     : `<div class="person-items" style="color:var(--stone);font-style:italic">아직 입력된 공통 준비물이 없어요.${editMode?' 입력 버튼으로 추가해 보세요.':''}</div>`;
-  // 이름 칸은 비워두되 flex:1 자리는 남겨 편집 버튼을 오른쪽에 붙인다
   return `<h2 style="font-size:15px;margin-top:18px">🎒 공통 준비물</h2>
-    <div class="person-card">
-      <div class="person-top"><span class="person-name"></span>${btn}</div>${items}
-    </div>`;
+    <div class="person-card"><div class="pc-main">${items}</div>${btn}</div>`;
 }
 
 // 개인별 추가 준비물 (3명) — 공통 준비물 외 각자 챙길 것
@@ -1446,12 +1447,11 @@ function personalHtml(){
     const p = personal[i] || {name:'',items:''};
     const hasName = !!(p.name && p.name.trim());
     const av = hasName ? `<span class="person-av">${esc(p.name.trim().charAt(0))}</span>` : '';
-    const name = hasName ? `<span class="person-name">${esc(p.name)}</span>` : `<span class="person-name ph"> </span>`;
+    // 이름이 없으면 이름 줄 자체를 만들지 않는다 (빈 줄 방지)
+    const top = hasName ? `<div class="person-top">${av}<span class="person-name">${esc(p.name)}</span></div>` : '';
     const btn = editMode ? `<button class="person-edit" onclick="openPerson(${i})">${(p.name||p.items)?'편집':'입력'}</button>` : '';
     const items = p.items ? `<div class="person-items">${esc(p.items).replace(/\n/g,'<br>')}</div>` : '';
-    html += `<div class="person-card">
-      <div class="person-top">${av}${name}${btn}</div>${items}
-    </div>`;
+    html += `<div class="person-card"><div class="pc-main">${top}${items}</div>${btn}</div>`;
   }
   return html;
 }
