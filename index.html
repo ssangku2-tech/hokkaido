@@ -1432,9 +1432,10 @@ function commonHtml(){
   const items = common
     ? `<div class="person-items">${esc(common).replace(/\n/g,'<br>')}</div>`
     : `<div class="person-items" style="color:var(--stone);font-style:italic">아직 입력된 공통 준비물이 없어요.${editMode?' 입력 버튼으로 추가해 보세요.':''}</div>`;
-  return `<h2 style="font-size:15px;margin-top:18px">🎒 공통 준비물 <span style="font-size:11px;color:var(--mut);font-weight:600">(함께 쓰는 것)</span></h2>
+  // 이름 칸은 비워두되 flex:1 자리는 남겨 편집 버튼을 오른쪽에 붙인다
+  return `<h2 style="font-size:15px;margin-top:18px">🎒 공통 준비물</h2>
     <div class="person-card">
-      <div class="person-top"><span class="person-name">공통</span>${btn}</div>${items}
+      <div class="person-top"><span class="person-name"></span>${btn}</div>${items}
     </div>`;
 }
 
