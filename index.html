@@ -71,6 +71,7 @@
     padding:15px 16px;color:#fff;margin-bottom:6px;box-shadow:var(--shadow)}
   .day-head .t{font-size:17px;font-weight:800;letter-spacing:-.3px}
   .day-head .s{font-size:12.5px;opacity:.85;margin-top:3px}
+  .wx-note{display:inline-block;margin-top:8px;font-size:11px;color:rgba(255,255,255,.72);font-weight:600}
   .route-link{display:inline-flex;align-items:center;gap:6px;margin-top:11px;
     background:rgba(255,255,255,.15);border:1px solid rgba(255,255,255,.25);color:#fff;
     padding:7px 13px;border-radius:11px;font-size:12.5px;font-weight:700;text-decoration:none}
@@ -1101,6 +1102,95 @@ let costFilter = '전체'; // 이름 필터
 const JPY_TO_KRW = 9.5;  // 100엔 = 950원
 let editIdx = -1;
 
+/* ============ 날씨 (Open-Meteo 실황 예보) ============
+   일차별 주요 체류지 좌표. 일정 데이터(Firebase)와 별개인 표시 전용 정보라 코드에 둔다.
+   API 키가 필요 없고 CORS가 열려 있어 정적 페이지에서 바로 호출된다. */
+const WX_SPOTS = [
+  {ko:"아칸초",   lat:43.1155, lon:144.1211},
+  {ko:"아칸호반", lat:43.4214, lon:144.0849},
+  {ko:"아바시리", lat:44.0213, lon:144.2697},
+  {ko:"우토로",   lat:44.0700, lon:144.9941},
+  {ko:"네무로",   lat:43.3236, lon:145.5750},
+  {ko:"기리타푸", lat:43.0798, lon:145.1231},
+  {ko:"구시로",   lat:42.9750, lon:144.3747}
+];
+// WMO 기상 코드 → 아이콘
+function wxIcon(c){
+  if(c===0) return '☀️';
+  if(c===1) return '🌤️';
+  if(c===2) return '⛅';
+  if(c===3) return '☁️';
+  if(c===45||c===48) return '🌫️';
+  if(c>=51&&c<=57) return '🌦️';
+  if(c>=61&&c<=67) return '🌧️';
+  if((c>=71&&c<=77)||c===85||c===86) return '🌨️';
+  if(c>=80&&c<=82) return '🌦️';
+  if(c>=95) return '⛈️';
+  return '🌡️';
+}
+let wxLive = {};   // {일차 인덱스: {txt, spot}} — 받아온 날짜만 채워진다
+let wxStamp = 0;   // 마지막 갱신 시각(ms)
+// 실황이 있으면 그것을, 없으면 일정에 적힌 기본값을 쓴다
+function wxOf(i){ return (wxLive[i] && wxLive[i].txt) || (DAYS[i] && DAYS[i].wx) || ''; }
+function wxDateStr(i){
+  const d = new Date(TRIP_START.getFullYear(), TRIP_START.getMonth(), TRIP_START.getDate()+i);
+  return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+}
+function applyWxData(list){
+  const out = {};
+  list.forEach((r,i)=>{
+    const d = r && r.daily; if(!d || !d.time) return;
+    const k = d.time.indexOf(wxDateStr(i));
+    if(k<0) return;                                    // 예보 범위(16일) 밖이면 건너뜀
+    const hi = Math.round(d.temperature_2m_max[k]), lo = Math.round(d.temperature_2m_min[k]);
+    if(!isFinite(hi) || !isFinite(lo)) return;
+    out[i] = {txt: wxIcon(d.weather_code[k])+hi+'°/'+lo+'°', spot: (WX_SPOTS[i]||{}).ko||''};
+  });
+  return out;
+}
+function loadWeather(){
+  const cached = lsLoad('wx');
+  // 3시간 이내 캐시는 그대로 사용 (예보는 그보다 자주 바뀌지 않는다)
+  if(cached && cached.stamp && Date.now()-cached.stamp < 3*3600*1000 && cached.data){
+    wxLive = cached.data; wxStamp = cached.stamp; renderWx(); return;
+  }
+  if(cached && cached.data){ wxLive = cached.data; wxStamp = cached.stamp||0; renderWx(); }
+  const n = Math.min(WX_SPOTS.length, DAYS.length);
+  const spots = WX_SPOTS.slice(0,n);
+  const url = 'https://api.open-meteo.com/v1/forecast'
+    + '?latitude='  + spots.map(s=>s.lat).join(',')
+    + '&longitude=' + spots.map(s=>s.lon).join(',')
+    + '&daily=weather_code,temperature_2m_max,temperature_2m_min'
+    + '&timezone=Asia%2FTokyo&forecast_days=16';
+  fetch(url).then(r=>r.ok? r.json() : Promise.reject(r.status)).then(j=>{
+    const data = applyWxData(Array.isArray(j)? j : [j]);
+    if(!Object.keys(data).length) return;              // 전부 범위 밖이면 기본값 유지
+    wxLive = data; wxStamp = Date.now();
+    lsSave('wx', {stamp:wxStamp, data:wxLive});
+    renderWx();
+  }).catch(e=>console.warn('날씨 조회 실패 — 기본값 사용', e));
+}
+// 탭·날짜 헤더의 날씨 표시만 갱신 (전체 재렌더 없이)
+function renderWx(){
+  document.querySelectorAll('.tab').forEach(t=>{
+    const i = +t.dataset.i, el = t.querySelector('.wx');
+    if(el) el.textContent = wxOf(i);
+  });
+  document.querySelectorAll('.panel').forEach(p=>{
+    const i = +p.dataset.i, el = p.querySelector('.day-head .t');
+    if(el && DAYS[i]) el.textContent = `${DAYS[i].n}일차 · ${DAYS[i].date}(${DAYS[i].dow}) ${wxOf(i)}`;
+    const src = p.querySelector('.wx-src');
+    if(src) src.innerHTML = wxSrcHtml(i);
+  });
+}
+function wxSrcHtml(i){
+  const w = wxLive[i];
+  if(!w) return `<span class="wx-note">날씨 예보 대기 중 · 여행 16일 전부터 실황 표시</span>`;
+  const d = new Date(wxStamp);
+  const hh = String(d.getHours()).padStart(2,'0'), mm = String(d.getMinutes()).padStart(2,'0');
+  return `<span class="wx-note">🌡️ ${w.spot} 기준 예보 · ${hh}:${mm} 갱신 · Open-Meteo</span>`;
+}
+
 function todayDayIndex(){
   const now = new Date();
   const t0 = new Date(2026,7,23), t1 = new Date(2026,7,29,23,59);
@@ -1135,7 +1225,7 @@ function buildTabs(){
     <div class="tab ${i===0?'active':''} ${i===todayI?'today':''}" data-i="${i}" onclick="showDay(${i})">
       <div class="d">${d.n}일차</div>
       <div class="dt">${d.date}(${d.dow})</div>
-      <div class="wx">${d.wx}</div>
+      <div class="wx">${wxOf(i)}</div>
     </div>`).join('');
 }
 
@@ -1398,9 +1488,10 @@ function buildPanels(){
     return `
     <div class="panel ${i===0?'active':''}" data-i="${i}">
       <div class="day-head">
-        <div class="t">${d.n}일차 · ${d.date}(${d.dow}) ${d.wx}</div>
+        <div class="t">${d.n}일차 · ${d.date}(${d.dow}) ${wxOf(i)}</div>
         <div class="s">${d.head}</div>
         <div class="s" style="opacity:.7">${d.sub}</div>
+        <div class="wx-src">${wxSrcHtml(i)}</div>
         <a class="route-link" href="${d.route}" target="_blank">🗺️ 이동 경로 보기</a>
       </div>
       <div class="tl">${d.items.map((it,ii)=>itemHtml(it,i,ii)).join('')}</div>
@@ -1941,8 +2032,17 @@ applyMode();
 const ti = todayDayIndex();
 if(ti>=0) showDay(ti);
 
-// 전체 진행도 1분마다 자동 갱신
-setInterval(renderTripProgress, 60000);
+// 날씨 실황 조회 (실패해도 일정에 적힌 기본값이 그대로 표시됨)
+loadWeather();
+setInterval(loadWeather, 3*3600*1000);   // 3시간마다 재조회
+
+// 전체 진행도 1분마다 자동 갱신 · 날짜가 바뀌면 오늘 탭으로 이동
+let _lastDayIdx = todayDayIndex();
+setInterval(()=>{
+  renderTripProgress();
+  const t = todayDayIndex();
+  if(t>=0 && t!==_lastDayIdx){ _lastDayIdx = t; buildTabs(); showDay(t); }
+}, 60000);
 </script>
 </body>
 </html>
