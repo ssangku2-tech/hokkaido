@@ -68,16 +68,22 @@
   @keyframes fade{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
 
   .day-head{background:linear-gradient(135deg,var(--ink),var(--ink2));border-radius:16px;
-    padding:15px 16px;color:#fff;margin-bottom:6px;box-shadow:var(--shadow)}
+    padding:15px 16px;color:#fff;margin-bottom:6px;box-shadow:var(--shadow);
+    position:relative;overflow:hidden}
   .day-head .t{font-size:17px;font-weight:800;letter-spacing:-.3px}
   .day-head .s{font-size:12.5px;opacity:.85;margin-top:3px}
+  .day-head-content{position:relative}
   .wx-note{display:inline-block;margin-top:8px;font-size:11px;color:rgba(255,255,255,.72);font-weight:600}
   .route-row{display:flex;align-items:center;gap:10px;margin-top:11px;flex-wrap:wrap}
   .route-link{display:inline-flex;align-items:center;gap:6px;margin-top:0;
-    background:rgba(255,255,255,.15);border:1px solid rgba(255,255,255,.25);color:#fff;
+    background:rgba(20,45,60,.55);backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);
+    border:1px solid rgba(255,255,255,.25);color:#fff;
     padding:7px 13px;border-radius:11px;font-size:12.5px;font-weight:700;text-decoration:none}
-  .route-link:active{background:rgba(255,255,255,.28)}
-  .route-mini{display:block;flex-shrink:0}
+  .route-link:active{background:rgba(20,45,60,.72)}
+  .route-bg{position:absolute;inset:0;width:100%;height:100%;display:block}
+  .route-bg-scrim{position:absolute;inset:0;pointer-events:none;
+    background:linear-gradient(180deg,rgba(14,42,59,.82) 0%,rgba(14,42,59,.62) 32%,
+      rgba(14,42,59,.3) 54%,rgba(14,42,59,.06) 74%,rgba(14,42,59,0) 90%)}
 
   /* ---- 전체 기간 진행선 ---- */
   .trip-line{padding:8px 14px;background:var(--paper);position:sticky;top:0;z-index:21;border-bottom:1px solid var(--line)}
@@ -1547,8 +1553,11 @@ const HOKKAIDO_OUTLINE = [
 // 날짜별로 달라지지 않아야 서로 위치 비교가 되므로 모든 날짜가 이 고정 범위를 공유함
 const HK_BOUNDS = {lngMin:141.5, lngMax:146.0, latMin:42.55, latMax:44.35};
 
-// 이동 경로를 (서쪽을 잘라낸) 홋카이도 동부 지도 윤곽 위에 점·선으로 표시하는 SVG 미니맵 (고정 좌표계 투영)
-function routeMiniMap(route){
+// 일정 요약 카드 전체를 채우는 배경 지도 레이어(윤곽+경로).
+// viewBox 비율을 카드의 가로로 긴 비율에 맞춰 잡아 두어(가로·세로 축척 별도 계산) 어느 날짜든
+// 카드 안에서 잘리지 않고 온전히 보이고, 글자가 있는 위쪽은 반투명 스크림으로 얇게 눌러 보이게 하되
+// 완전히 가리지는 않고, 글자·버튼이 없는 아래쪽 빈 공간에서는 선명하게 드러나게 함
+function routeCardBg(route){
   if(!route) return '';
   const m = route.match(/\/dir\/(.+)$/);
   if(!m) return '';
@@ -1556,30 +1565,31 @@ function routeMiniMap(route){
     try{ return decodeURIComponent(seg); }catch(e){ return seg; }
   }).map(name=>ROUTE_COORDS[name]).filter(Boolean);
   if(pts.length<2) return '';
-  const W=136, H=80, PAD=5;
+  const W=216, H=76, PAD=8; // 일정 카드의 대략적인 가로세로 비율에 맞춘 캔버스
   const cosLat = Math.cos((HK_BOUNDS.latMin+HK_BOUNDS.latMax)/2*Math.PI/180);
   const lngSpan = (HK_BOUNDS.lngMax-HK_BOUNDS.lngMin)*cosLat;
   const latSpan = HK_BOUNDS.latMax-HK_BOUNDS.latMin;
-  const scale = Math.min((W-PAD*2)/lngSpan, (H-PAD*2)/latSpan);
+  const scaleX = (W-PAD*2)/lngSpan, scaleY = (H-PAD*2)/latSpan; // 카드를 꽉 채우도록 축을 따로 늘림
   const midLng=(HK_BOUNDS.lngMin+HK_BOUNDS.lngMax)/2, midLat=(HK_BOUNDS.latMin+HK_BOUNDS.latMax)/2;
   const proj = ([lng,lat])=>[
-    (W/2 + (lng-midLng)*cosLat*scale).toFixed(1),
-    (H/2 - (lat-midLat)*scale).toFixed(1)
+    (W/2 + (lng-midLng)*cosLat*scaleX).toFixed(1),
+    (H/2 - (lat-midLat)*scaleY).toFixed(1)
   ];
   const outlineD = HOKKAIDO_OUTLINE.map(proj).map((p,i)=>(i===0?'M':'L')+p[0]+' '+p[1]).join(' ')+' Z';
   const xy = pts.map(proj);
   const dPath = xy.map((p,i)=>(i===0?'M':'L')+p[0]+' '+p[1]).join(' ');
   const dots = xy.map((p,i)=>{
     const isFirst=i===0, isLast=i===xy.length-1;
-    const r = isFirst||isLast? 3.4 : 2;
+    const r = isFirst||isLast? 2.2 : 1.2;
     const fill = isFirst? '#7ee787' : isLast? '#ff8a8a' : '#ffd166';
-    return `<circle cx="${p[0]}" cy="${p[1]}" r="${r}" fill="${fill}" stroke="rgba(0,0,0,.35)" stroke-width="0.6"/>`;
+    return `<circle cx="${p[0]}" cy="${p[1]}" r="${r}" fill="${fill}" stroke="rgba(0,0,0,.35)" stroke-width="0.4"/>`;
   }).join('');
-  return `<svg class="route-mini" viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" aria-hidden="true">
-    <path d="${outlineD}" fill="rgba(255,255,255,.09)" stroke="rgba(255,255,255,.5)" stroke-width="1"/>
-    <path d="${dPath}" fill="none" stroke="#ffd166" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
-    ${dots}
-  </svg>`;
+  return `<svg class="route-bg" viewBox="0 0 ${W} ${H}" preserveAspectRatio="xMidYMid meet" aria-hidden="true">
+      <path d="${outlineD}" fill="rgba(255,255,255,.06)" stroke="rgba(255,255,255,.3)" stroke-width="0.7"/>
+      <path d="${dPath}" fill="none" stroke="#ffd166" stroke-width="0.9" stroke-linecap="round" stroke-linejoin="round"/>
+      ${dots}
+    </svg>
+    <div class="route-bg-scrim"></div>`;
 }
 
 function buildPanels(){
@@ -1588,13 +1598,15 @@ function buildPanels(){
     return `
     <div class="panel ${i===0?'active':''}" data-i="${i}">
       <div class="day-head">
-        <div class="t">${d.n}일차 · ${d.date}(${d.dow}) ${wxOf(i)}</div>
-        <div class="s">${d.head}</div>
-        <div class="s" style="opacity:.7">${d.sub}</div>
-        <div class="wx-src">${wxSrcHtml(i)}</div>
-        <div class="route-row">
-          <a class="route-link" href="${d.route}" target="_blank">🗺️ 이동 경로 보기</a>
-          ${routeMiniMap(d.route)}
+        ${routeCardBg(d.route)}
+        <div class="day-head-content">
+          <div class="t">${d.n}일차 · ${d.date}(${d.dow}) ${wxOf(i)}</div>
+          <div class="s">${d.head}</div>
+          <div class="s" style="opacity:.7">${d.sub}</div>
+          <div class="wx-src">${wxSrcHtml(i)}</div>
+          <div class="route-row">
+            <a class="route-link" href="${d.route}" target="_blank">🗺️ 이동 경로 보기</a>
+          </div>
         </div>
       </div>
       <div class="tl">${d.items.map((it,ii)=>itemHtml(it,i,ii)).join('')}</div>
