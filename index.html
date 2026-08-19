@@ -560,7 +560,7 @@ let DAYS = [
     n:2, date:"8/24", dow:"월", wx:"⛅20°/13°",
     head:"구시로습지 목도 트레킹 → 온네토·아칸호",
     sub:"세계자연유산 습원 산책 · 원시 호수 온네토 · 아이누코탄",
-    route:"https://www.google.com/maps/dir/釧路市阿寒町新町2-4-33/温根内ビジターセンター/オンネトー/阿寒湖畔",
+    route:"https://www.google.com/maps/dir/釧路市阿寒町新町2-4-33/温根内ビジターセンター/足寄町オンネトー/阿寒湖畔",
     items:[
       {t:"09:30",sub:"~11:30",k:"trek",kind:"🥾 습원 트레킹",ttl:"구시로습지공원 온네나이 목도(木道) 코스",pin:"温根内ビジターセンター",dur:"편도~순환 약 1.5~2시간",
         desc:"축구장 3만여 개 규모의 세계자연유산 습원. 대부분 출입금지 구역이지만 나무로 놓은 목도길만은 걸을 수 있어 안내소 기점 순환 코스로 산책. 습원을 가로지르는 강에서 카누 프로그램도 있으나 사전 예약 필요. <b>숙소 체크아웃 09:00 마감 + 아칸초→온네나이 약 30분</b>을 감안해 09:30 시작.",
@@ -611,7 +611,7 @@ let DAYS = [
     n:3, date:"8/25", dow:"화", wx:"☀️22°/13°",
     head:"굿샤로호·마슈호 → 아바시리 감옥박물관",
     sub:"모래찜질 온천 · 세계 2위 투명도 호수 · 유황산 · 감옥 역사",
-    route:"https://www.google.com/maps/dir/阿寒湖畔/砂湯　屈斜路湖/摩周湖第一展望台/美幌峠/硫黄山/網走市街",
+    route:"https://www.google.com/maps/dir/阿寒湖畔/砂湯　屈斜路湖/摩周湖第一展望台/美幌峠/川湯硫黄山/網走市街",
     items:[
       {t:"08:30",sub:"~09:30",k:"move",kind:"🚗 이동",ttl:"굿샤로호(屈斜路湖)로 이동",pin:"砂湯 屈斜路湖",
         desc:"아칸호에서 약 1시간. 굿샤로호는 사방이 온천지대로, 호숫가 모래를 파면 뜨거운 물이 솟는 「사유(砂湯)」 명소.",chips:["🚗 약 1h"]},
@@ -689,7 +689,7 @@ let DAYS = [
     n:5, date:"8/27", dow:"목", wx:"🌫️18°/13°",
     head:"일본 최동단 네무로 — 노츠케반도 · 노사프곶",
     sub:"장거리 이동 · 고사목 기암지대 · 러시아 접경 최동단",
-    route:"https://www.google.com/maps/dir/ウトロ/野付半島　トドワラ/納沙布岬/根室市街",
+    route:"https://www.google.com/maps/dir/斜里町ウトロ/野付半島　トドワラ/納沙布岬/根室市街",
     items:[
       {t:"08:00",sub:"~12:00",k:"move",kind:"🚗 장거리 이동",ttl:"네무로(根室)行 이동 (약 4시간)",pin:"根室市街",
         desc:"시레토코 반대편 최동단 네무로까지 장거리 구간. 나카시베츠 등 경유지에서 휴식 겸 주유.",chips:["🚗 약 4h","⛽ 중간 주유"]},
@@ -884,6 +884,7 @@ function initFirebase(){
         restoreLostItem();
         fixLastDaySchedule();   // 마지막 날 출발 08:00 · 주유 12:00 반영
         fixKushiroStay();       // 1일차 숙소를 실제 예약처(くしロコ)로 갱신
+        fixRouteLinks();        // 이동 경로 링크의 모호한 지명 보정
         lsSave('days', DAYS);
         buildTabs(); buildPanels(); renderTripProgress();
         const ti=todayDayIndex(); if(ti>=0) showDay(ti); else keepActiveDay();
@@ -1082,6 +1083,31 @@ function fixKushiroStay(){
     }
     if(changed) persistDays();
   }catch(e){ console.error('1일차 숙소 정보 갱신 실패:', e); }
+}
+// ── 일회성 마이그레이션: 이동 경로 링크의 모호한 지명 보정 ──
+// "オンネトー"·"硫黄山"·"ウトロ" 단독 지명은 Google 지도가 엉뚱한 곳(교토·서울·라우스 등)으로
+// 잘못 매칭해 경로 안내가 깨지는 문제가 있어, 구체적인 값으로 저장본을 덮어쓴다. 내용 검사로 멱등.
+function fixRouteLinks(){
+  try{
+    if(!Array.isArray(DAYS)) return;
+    let changed = false;
+    const d24 = DAYS.find(d => d && d.date === "8/24");
+    if(d24 && d24.route && d24.route.indexOf("/温根内ビジターセンター/オンネトー/") >= 0){
+      d24.route = d24.route.replace("/温根内ビジターセンター/オンネトー/", "/温根内ビジターセンター/足寄町オンネトー/");
+      changed = true;
+    }
+    const d25 = DAYS.find(d => d && d.date === "8/25");
+    if(d25 && d25.route && d25.route.indexOf("/美幌峠/硫黄山/") >= 0){
+      d25.route = d25.route.replace("/美幌峠/硫黄山/", "/美幌峠/川湯硫黄山/");
+      changed = true;
+    }
+    const d27 = DAYS.find(d => d && d.date === "8/27");
+    if(d27 && d27.route && d27.route.indexOf("dir/ウトロ/") >= 0){
+      d27.route = d27.route.replace("dir/ウトロ/", "dir/斜里町ウトロ/");
+      changed = true;
+    }
+    if(changed) persistDays();
+  }catch(e){ console.error('이동 경로 링크 보정 실패:', e); }
 }
 // Firebase가 객체로 돌려줄 수 있어 배열로 정규화
 function normalizeDays(val){
@@ -2021,6 +2047,7 @@ BASE_DAYS = JSON.parse(JSON.stringify(DAYS)); // 코드 원본 보관(최초 시
 })();
 fixLastDaySchedule();                        // 저장본이 옛 값이면 마지막 날 일정 갱신(Firebase 연결 전 표시용)
 fixKushiroStay();                            // 저장본이 옛 값이면 1일차 숙소 정보 갱신
+fixRouteLinks();                             // 저장본이 옛 값이면 이동 경로 링크 보정(Firebase 연결 전 표시용)
 initFirebase();                              // Firebase 연동(연결되면 최신값으로 갱신)
 buildTabs();
 buildPanels();
