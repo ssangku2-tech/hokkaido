@@ -77,8 +77,7 @@
     background:rgba(255,255,255,.15);border:1px solid rgba(255,255,255,.25);color:#fff;
     padding:7px 13px;border-radius:11px;font-size:12.5px;font-weight:700;text-decoration:none}
   .route-link:active{background:rgba(255,255,255,.28)}
-  .route-mini{display:block;flex-shrink:0;background:rgba(255,255,255,.08);
-    border:1px solid rgba(255,255,255,.18);border-radius:9px}
+  .route-mini{display:block;flex-shrink:0}
 
   /* ---- 전체 기간 진행선 ---- */
   .trip-line{padding:8px 14px;background:var(--paper);position:sticky;top:0;z-index:21;border-bottom:1px solid var(--line)}
@@ -1534,7 +1533,21 @@ const ROUTE_COORDS = {
   "ドーミーインPREMIUM釧路+釧路市北大通2-1":[144.3822,42.9838],
   "釧路市街":[144.3767,42.9850],
 };
-// 이동 경로를 간략한 점·선 SVG 미니맵으로 렌더 (실제 좌표 기반, 경위도 보정 적용)
+// 홋카이도 전체 윤곽 (해안선 주요 지점, 간략화) — 미니맵 배경용 근사 폴리곤 [lng,lat]
+const HOKKAIDO_OUTLINE = [
+  [141.94,45.52],[141.68,45.42],[141.75,44.95],[141.70,44.38],[141.65,43.94],[141.51,43.85],
+  [140.36,43.38],[140.78,43.20],[141.00,43.19],[140.51,42.97],[140.22,42.80],[139.85,42.43],
+  [140.13,41.87],[140.11,41.43],[140.20,41.24],[140.24,41.50],[140.44,41.63],[140.75,41.77],
+  [141.19,41.80],[141.03,42.32],[141.60,42.63],[142.36,42.33],[142.78,42.16],[142.93,42.12],
+  [143.15,41.93],[143.32,42.29],[143.50,42.45],[144.37,42.98],[144.85,43.03],[145.13,43.07],
+  [145.58,43.33],[145.82,43.38],[145.35,43.58],[145.13,43.66],[145.13,44.04],[145.30,44.35],
+  [144.99,44.07],[144.29,44.02],[143.35,44.35],[142.55,44.92]
+];
+// 미니맵 공통 투영 범위 — 실제 일정이 있는 동부 홋카이도 위주로 잘라서(서쪽 제외) 여백을 줄임.
+// 날짜별로 달라지지 않아야 서로 위치 비교가 되므로 모든 날짜가 이 고정 범위를 공유함
+const HK_BOUNDS = {lngMin:141.5, lngMax:146.0, latMin:42.55, latMax:44.35};
+
+// 이동 경로를 (서쪽을 잘라낸) 홋카이도 동부 지도 윤곽 위에 점·선으로 표시하는 SVG 미니맵 (고정 좌표계 투영)
 function routeMiniMap(route){
   if(!route) return '';
   const m = route.match(/\/dir\/(.+)$/);
@@ -1543,28 +1556,28 @@ function routeMiniMap(route){
     try{ return decodeURIComponent(seg); }catch(e){ return seg; }
   }).map(name=>ROUTE_COORDS[name]).filter(Boolean);
   if(pts.length<2) return '';
-  const W=94, H=50, PAD=7;
-  const lngs=pts.map(p=>p[0]), lats=pts.map(p=>p[1]);
-  const lngMin=Math.min(...lngs), lngMax=Math.max(...lngs);
-  const latMin=Math.min(...lats), latMax=Math.max(...lats);
-  const cosLat = Math.cos((latMin+latMax)/2*Math.PI/180);
-  const lngSpan = Math.max((lngMax-lngMin)*cosLat, 0.02);
-  const latSpan = Math.max(latMax-latMin, 0.02);
+  const W=136, H=80, PAD=5;
+  const cosLat = Math.cos((HK_BOUNDS.latMin+HK_BOUNDS.latMax)/2*Math.PI/180);
+  const lngSpan = (HK_BOUNDS.lngMax-HK_BOUNDS.lngMin)*cosLat;
+  const latSpan = HK_BOUNDS.latMax-HK_BOUNDS.latMin;
   const scale = Math.min((W-PAD*2)/lngSpan, (H-PAD*2)/latSpan);
-  const midLng=(lngMin+lngMax)/2, midLat=(latMin+latMax)/2;
-  const xy = pts.map(([lng,lat])=>[
+  const midLng=(HK_BOUNDS.lngMin+HK_BOUNDS.lngMax)/2, midLat=(HK_BOUNDS.latMin+HK_BOUNDS.latMax)/2;
+  const proj = ([lng,lat])=>[
     (W/2 + (lng-midLng)*cosLat*scale).toFixed(1),
     (H/2 - (lat-midLat)*scale).toFixed(1)
-  ]);
+  ];
+  const outlineD = HOKKAIDO_OUTLINE.map(proj).map((p,i)=>(i===0?'M':'L')+p[0]+' '+p[1]).join(' ')+' Z';
+  const xy = pts.map(proj);
   const dPath = xy.map((p,i)=>(i===0?'M':'L')+p[0]+' '+p[1]).join(' ');
   const dots = xy.map((p,i)=>{
     const isFirst=i===0, isLast=i===xy.length-1;
-    const r = isFirst||isLast? 3.2 : 1.8;
-    const fill = isFirst? '#7ee787' : isLast? '#ff8a8a' : 'rgba(255,255,255,.85)';
-    return `<circle cx="${p[0]}" cy="${p[1]}" r="${r}" fill="${fill}"/>`;
+    const r = isFirst||isLast? 3.4 : 2;
+    const fill = isFirst? '#7ee787' : isLast? '#ff8a8a' : '#ffd166';
+    return `<circle cx="${p[0]}" cy="${p[1]}" r="${r}" fill="${fill}" stroke="rgba(0,0,0,.35)" stroke-width="0.6"/>`;
   }).join('');
   return `<svg class="route-mini" viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" aria-hidden="true">
-    <path d="${dPath}" fill="none" stroke="rgba(255,255,255,.65)" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+    <path d="${outlineD}" fill="rgba(255,255,255,.09)" stroke="rgba(255,255,255,.5)" stroke-width="1"/>
+    <path d="${dPath}" fill="none" stroke="#ffd166" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
     ${dots}
   </svg>`;
 }
